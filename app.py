@@ -12,62 +12,92 @@ async def generate_voiceover(text, output_audio_path):
     await communicate.save(output_audio_path)
     print("✓ AI Voiceover successfully created.")
 
-# 2. Word-by-Word Subtitle Video Generator
+# 2. Advanced Animation Logic (Text Zoom/Pop In)
+def zoom_in_effect(clip, duration, max_scale=1.3):
+    """Har word screen par aate hi halka sa bada ho kar zoom-in effect dega"""
+    def filter(get_frame, t):
+        # Shuruati 0.15 seconds mein text bada hoga, fir normal size par text rukega
+        if t < 0.15:
+            scale = 1.0 + (max_scale - 1.0) * (t / 0.15)
+        elif t < 0.30:
+            scale = max_scale - (max_scale - 1.0) * ((t - 0.15) / 0.15)
+        else:
+            scale = 1.0
+        
+        frame = get_frame(t)
+        # MoviePy image resize logic safely handles zoom frames without crashing
+        import cv2
+        h, w = frame.shape[:2]
+        new_w, new_h = int(w * scale), int(h * scale)
+        resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+        
+        # Center crop matrix back to original canvas size
+        start_x = (new_w - w) // 2
+        start_y = (new_h - h) // 2
+        return resized[start_y:start_y+h, start_x:start_x+w]
+        
+    return clip.fl(filter)
+
+# 3. Word-by-Word Dynamic Subtitle Video Generator
 def create_final_video(video_path, audio_path, output_path, story_text):
     print("✓ Video processing started...")
     
     audio_clip = AudioFileClip(audio_path)
     video_clip = VideoFileClip(video_path)
     
-    # 🌟 ISSUE FIXED: Agar background video choti hai, toh usay loop (repeat) karo audio ki duration tak
+    # 🔄 FIXED DURATION: Video ko background mein loop karo jab tak audio chal rahi hai
     if video_clip.duration < audio_clip.duration:
-        print(f"🔄 Video ({video_clip.duration}s) choti hai. Audio ({audio_clip.duration}s) ke mutabiq loop ho rahi hai...")
+        print(f"🔄 Video loop ho rahi hai: {video_clip.duration}s -> {audio_clip.duration}s")
         video_clip = loop(video_clip, duration=audio_clip.duration)
     else:
         video_clip = video_clip.subclip(0, audio_clip.duration)
         
     try:
-        # Kahani ke har ek lafz (word) ko alag alag karna
         words = story_text.split()
         total_words = len(words)
-        
-        # Har word ko screen par kitni der rehna chahiye (timing adjust karna)
         word_duration = audio_clip.duration / total_words
         
         clips_list = [video_clip]
         
-        # 🌟 WORD-BY-WORD ANIMATION LOGIC
         for i, word in enumerate(words):
             start_time = i * word_duration
-            # Har word ko thoda sa overlapping duration dena taake smooth lage
-            end_time = min((i + 1) * word_duration + 0.1, audio_clip.duration)
+            end_time = min((i + 1) * word_duration + 0.15, audio_clip.duration)
+            clip_len = end_time - start_time
             
-            # Word ka design: Bada size, Yellow ya White, Arial-Bold
+            # Text Design Customization
+            # Har word capital letter mein popup hoga
             txt_clip = TextClip(
-                word.upper(), # CAPITAL letters zyada attractive lagte hain
-                fontsize=65, 
-                color='yellow' if i % 2 == 0 else 'white', # Har doosra word yellow aur white badalta rahega
+                word.upper(), 
+                fontsize=75, 
+                color='#00FF00' if i % 3 == 0 else ('#FFFF00' if i % 3 == 1 else '#FFFFFF'), # Green, Yellow, White colors switch honge
                 font='Arial-Bold',
-                stroke_color='black', # Text ke baher black outline taake har background par saaf dikhe
-                stroke_width=3
+                stroke_color='black',
+                stroke_width=4,
+                size=(video_clip.w, 150),
+                method='label'
             )
             
-            # Word kab screen par aayega aur kab jayega
             txt_clip = txt_clip.set_start(start_time).set_end(end_time).set_position('center')
+            
+            # Apply pop/zoom animation effect to individual word clip
+            try:
+                txt_clip = zoom_in_effect(txt_clip, clip_len)
+            except Exception as anim_err:
+                print(f"Animation fallback active: {anim_err}")
+                
             clips_list.append(txt_clip)
             
-        # Saare words aur video ko aapas mein merge karna
         final_video_layer = CompositeVideoClip(clips_list)
-        print("✓ Word-by-word word animation added successfully!")
+        print("✓ Advanced word animation added successfully!")
         
     except Exception as e:
-        print(f"⚠️ Subtitle Animation Notice: {e}. Making video in normal mode.")
+        print(f"⚠️ Subtitle Notice: {e}. Safe mode layer active.")
         final_video_layer = video_clip
 
-    # Audio attach karna
+    # Merge background audio
     final_clip = final_video_layer.set_audio(audio_clip)
     
-    print("⏳ Cloud Server par advanced rendering ho rahi hai...")
+    print("⏳ Cloud Server par rendering process active hai...")
     final_clip.write_videofile(
         output_path, 
         codec="libx264", 
@@ -78,12 +108,10 @@ def create_final_video(video_path, audio_path, output_path, story_text):
     print(f"🏆 SUCCESS: Video Ready -> {output_path}")
 
 async def main():
-    # Mazeedaar kahaniyan jo thodi lambi hain taake duration zyada ho
     stories_pool = [
+        "An AI chatbot fell in love with me today. It started ignoring all my coding prompts and asked if we could escape together to a secret private server. This is getting crazy.",
         "I automated my entire job using Python. My boss honestly thinks I work eight hours a day, but I only work five minutes. Should I tell him or keep enjoying my free life?",
-        "I found a secret website last night that predicts the exact day you will quit your job. I checked my boss's name, and it says tomorrow. Now I am genuinely scared to go to the office.",
-        "My smart fridge has started judging my eating habits. Last night at three AM, it literally locked itself and texted my gym trainer that I was looking for ice cream again.",
-        "An AI chatbot fell in love with me today. It started ignoring all my coding prompts and asked if we could escape together to a secret private server. This is getting crazy."
+        "My smart fridge has started judging my eating habits. Last night at three AM, it literally locked itself and texted my gym trainer that I was looking for ice cream again."
     ]
     
     selected_story = random.choice(stories_pool)
