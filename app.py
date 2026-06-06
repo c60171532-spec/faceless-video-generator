@@ -4,50 +4,56 @@ import asyncio
 from moviepy.editor import VideoFileClip, AudioFileClip, TextClip, CompositeVideoClip
 from moviepy.video.fx.all import loop
 
-# 1. AI Voiceover Generator
+# 1. Safe AI Voiceover Generator (Alternative Natural Voice format)
 async def generate_voiceover(text, output_audio_path):
     import edge_tts
-    voice = "en-US-ChristopherNeural"
+    # Guy voice use kar rahe hain jo dynamic shorts ke liye zyada loud aur crispy hai
+    voice = "en-US-GuyNeural"
     communicate = edge_tts.Communicate(text, voice)
     await communicate.save(output_audio_path)
     print("✓ AI Voiceover successfully created.")
 
-# 2. Advanced Animation Logic (Text Zoom/Pop In)
-def zoom_in_effect(clip, duration, max_scale=1.3):
-    """Har word screen par aate hi halka sa bada ho kar zoom-in effect dega"""
-    def filter(get_frame, t):
-        # Shuruati 0.15 seconds mein text bada hoga, fir normal size par text rukega
-        if t < 0.15:
-            scale = 1.0 + (max_scale - 1.0) * (t / 0.15)
-        elif t < 0.30:
-            scale = max_scale - (max_scale - 1.0) * ((t - 0.15) / 0.15)
-        else:
-            scale = 1.0
+# 2. MoviePy Native Pop Animation Effect
+def make_pop_clip(word, start_time, end_time, video_w, color_text):
+    duration = end_time - start_time
+    
+    # Base Text Clip Creation
+    txt_clip = TextClip(
+        word.upper(), 
+        fontsize=70, 
+        color=color_text, 
+        font='Arial-Bold',
+        stroke_color='black',
+        stroke_width=4,
+        size=(video_w, 150),
+        method='label'
+    )
+    txt_clip = txt_clip.set_start(start_time).set_end(end_time).set_position('center')
+    
+    # 🌟 POP EFFECT: Shuruati 0.15 seconds mein text ko 1.3x zoom dena native moviepy scaling se
+    # Yeh bina OpenCV ke smooth animation cloud par deliver karega
+    intro_dur = min(0.15, duration)
+    
+    clip_intro = txt_clip.subclip(0, intro_dur).resize(lambda t: 1.0 + 0.3 * (t / intro_dur))
+    clip_rest = txt_clip.subclip(intro_dur, duration) if duration > intro_dur else None
+    
+    from moviepy.editor import concatenate_videoclips
+    if clip_rest:
+        final_word_clip = concatenate_videoclips([clip_intro, clip_rest]).set_start(start_time)
+    else:
+        final_word_clip = clip_intro.set_start(start_time)
         
-        frame = get_frame(t)
-        # MoviePy image resize logic safely handles zoom frames without crashing
-        import cv2
-        h, w = frame.shape[:2]
-        new_w, new_h = int(w * scale), int(h * scale)
-        resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-        
-        # Center crop matrix back to original canvas size
-        start_x = (new_w - w) // 2
-        start_y = (new_h - h) // 2
-        return resized[start_y:start_y+h, start_x:start_x+w]
-        
-    return clip.fl(filter)
+    return final_word_clip
 
-# 3. Word-by-Word Dynamic Subtitle Video Generator
+# 3. Main Video Compilation Loop
 def create_final_video(video_path, audio_path, output_path, story_text):
     print("✓ Video processing started...")
     
     audio_clip = AudioFileClip(audio_path)
     video_clip = VideoFileClip(video_path)
     
-    # 🔄 FIXED DURATION: Video ko background mein loop karo jab tak audio chal rahi hai
+    # Video looping logic
     if video_clip.duration < audio_clip.duration:
-        print(f"🔄 Video loop ho rahi hai: {video_clip.duration}s -> {audio_clip.duration}s")
         video_clip = loop(video_clip, duration=audio_clip.duration)
     else:
         video_clip = video_clip.subclip(0, audio_clip.duration)
@@ -61,43 +67,24 @@ def create_final_video(video_path, audio_path, output_path, story_text):
         
         for i, word in enumerate(words):
             start_time = i * word_duration
-            end_time = min((i + 1) * word_duration + 0.15, audio_clip.duration)
-            clip_len = end_time - start_time
+            end_time = min((i + 1) * word_duration + 0.1, audio_clip.duration)
             
-            # Text Design Customization
-            # Har word capital letter mein popup hoga
-            txt_clip = TextClip(
-                word.upper(), 
-                fontsize=75, 
-                color='#00FF00' if i % 3 == 0 else ('#FFFF00' if i % 3 == 1 else '#FFFFFF'), # Green, Yellow, White colors switch honge
-                font='Arial-Bold',
-                stroke_color='black',
-                stroke_width=4,
-                size=(video_clip.w, 150),
-                method='label'
-            )
+            # Alternate colors: Green, Yellow, White
+            color_choice = '#00FF00' if i % 3 == 0 else ('#FFFF00' if i % 3 == 1 else '#FFFFFF')
             
-            txt_clip = txt_clip.set_start(start_time).set_end(end_time).set_position('center')
-            
-            # Apply pop/zoom animation effect to individual word clip
-            try:
-                txt_clip = zoom_in_effect(txt_clip, clip_len)
-            except Exception as anim_err:
-                print(f"Animation fallback active: {anim_err}")
-                
-            clips_list.append(txt_clip)
+            word_clip = make_pop_clip(word, start_time, end_time, video_clip.w, color_choice)
+            clips_list.append(word_clip)
             
         final_video_layer = CompositeVideoClip(clips_list)
-        print("✓ Advanced word animation added successfully!")
+        print("✓ Word-by-word word pop animation completed!")
         
     except Exception as e:
-        print(f"⚠️ Subtitle Notice: {e}. Safe mode layer active.")
+        print(f"⚠️ Subtitle Fallback Active: {e}")
         final_video_layer = video_clip
 
-    # Merge background audio
     final_clip = final_video_layer.set_audio(audio_clip)
     
-    print("⏳ Cloud Server par rendering process active hai...")
+    print("⏳ Rendering final output on GitHub Cloud...")
     final_clip.write_videofile(
         output_path, 
         codec="libx264", 
@@ -109,8 +96,8 @@ def create_final_video(video_path, audio_path, output_path, story_text):
 
 async def main():
     stories_pool = [
-        "An AI chatbot fell in love with me today. It started ignoring all my coding prompts and asked if we could escape together to a secret private server. This is getting crazy.",
         "I automated my entire job using Python. My boss honestly thinks I work eight hours a day, but I only work five minutes. Should I tell him or keep enjoying my free life?",
+        "An AI chatbot fell in love with me today. It started ignoring all my coding prompts and asked if we could escape together to a secret private server. This is getting crazy.",
         "My smart fridge has started judging my eating habits. Last night at three AM, it literally locked itself and texted my gym trainer that I was looking for ice cream again."
     ]
     
