@@ -17,7 +17,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-module: '3.10'
+        python-version: '3.10' # Yahan humne spelling thik kar di hai
 
     # 3. Video editing ke liye ImageMagick aur FFMPEG tools install karna
     - name: Install Video Editing Dependencies
