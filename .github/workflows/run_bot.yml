@@ -1,0 +1,45 @@
+name: Generate Faceless Video
+
+# Yeh batata hai ke jab hum button dabayein tabhi bot chale
+on:
+  workflow_dispatch:
+
+jobs:
+  build-and-run:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. GitHub Repository se code copy karna
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    # 2. Linux Server par Python install karna
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-module: '3.10'
+
+    # 3. Video editing ke liye ImageMagick aur FFMPEG tools install karna
+    - name: Install Video Editing Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg imagemagick
+        # ImageMagick ki security policy ko allow karna taake TextClip chal sake
+        sudo sed -i 's/<policy domain="path" rights="none" pattern="@\*"//g' /etc/ImageMagick-6/policy.xml
+
+    # 4. Python libraries install karna
+    - name: Install Python Libraries
+      run: |
+        pip install -r requirements.txt
+
+    # 5. Bot (Script) ko run karna
+    - name: Run Video Generator Bot
+      run: |
+        python app.py
+
+    # 6. Bani hui video ko safe karna taake aap download kar sakein
+    - name: Upload Finished Video
+      uses: actions/upload-artifact@v4
+      with:
+        name: My-Generated-Video
+        path: final_output.mp4
