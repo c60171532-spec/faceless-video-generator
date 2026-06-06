@@ -1,2 +1,2 @@
 moviepy==1.0.3
-edge-tts==6.1.12
+gTTS==2.5.1
