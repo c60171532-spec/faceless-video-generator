@@ -1,3 +1,3 @@
 moviepy==1.0.3
-edge-tts
-SpeechRecognition
+edge-tts==6.1.3
+opencv-python==4.8.0.76
